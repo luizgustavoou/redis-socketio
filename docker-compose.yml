@@ -1,0 +1,29 @@
+version: '3.7'
+
+services:
+  server1:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000 
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+  server2:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001 
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
