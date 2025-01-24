@@ -15,45 +15,8 @@ const redisSubscriber = redisClient.duplicate();
 redisClient.connect();
 redisSubscriber.connect();
 
-redisClient.on("connect", () => {
-    console.log("Redis is ready!");
-});
-
-redisClient.on("error", (e) => {
-    console.log("Redis error ", e);
-});
-
-const userSocketMap = {};
-redisClient.set("key", "value");
-console.log("userSocketMap ", userSocketMap);
-
 io.on("connection", (socket) => {
     console.log("Usuário conectado: " + socket.id);
-
-    socket.on("register", (userId) => {
-        console.log(`Usuário registrado: ${userId}`);
-        userSocketMap[userId] = socket.id;
-
-        console.log("[REGISTER] userSocketMap ", userSocketMap);
-
-        redisClient.hSet("userSocketMap", userId, socket.id);
-    });
-
-    socket.on("sendMessage", (data) => {
-        const { userId, message } = data;
-        const targetSocketId = userSocketMap[userId];
-
-        if (targetSocketId) {
-            console.log("Enviar mensagem diretamente");
-            io.to(targetSocketId).emit("receiveMessage", message);
-        } else {
-            console.log("Usuário não encontrado, publicando no Redis.");
-            redisClient.publish(
-                "user-messages",
-                JSON.stringify({ userId, message })
-            );
-        }
-    });
 
     socket.on("sendChatMessage", (data) => {
         const { chatId, message } = data;
@@ -71,31 +34,23 @@ io.on("connection", (socket) => {
 
         const room = `chat-${chatId}`;
 
+        console.log(`[enterChat] Socket ${socket.id} entrando na sala ${room}`);
         socket.join(room);
-        redisClient.sadd(room, socket.id);
+        redisClient.sAdd(room, socket.id);
     });
 
-    socket.on("disconnect", () => {
-        console.log("Usuário desconectado: " + socket.id);
-        for (let userId in userSocketMap) {
-            if (userSocketMap[userId] === socket.id) {
-                redisClient.hdel("userSocketMap", userId);
-                delete userSocketMap[userId];
-            }
-        }
+    socket.on("leaveChat", (data) => {
+        console.log("[leaveChat] ", data);
+
+        const { chatId } = data;
+
+        const room = `chat-${chatId}`;
+
+        console.log(`[leaveChat] Socket ${socket.id} saindo da sala ${room}`);
+
+        socket.leave(room);
+        redisClient.sRem(room, socket.id);
     });
-});
-
-redisSubscriber.subscribe("user-messages", async (data, channel) => {
-    console.log("[user-messages] data", data);
-    const { userId, message } = JSON.parse(data);
-    const targetSocketId = userSocketMap[userId];
-
-    if (targetSocketId) {
-        io.to(targetSocketId).emit("receiveMessage", message);
-    } else {
-        console.log(`Usuário ${userId} ainda não está conectado.`);
-    }
 });
 
 redisSubscriber.subscribe("chat-messages", async (data, channel) => {
@@ -103,9 +58,19 @@ redisSubscriber.subscribe("chat-messages", async (data, channel) => {
 
     const { chatId, message: chatMessage } = JSON.parse(data);
 
-    const socketsId = await redisClient.sMembers(`chat-${chatId}`);
+    const room = `chat-${chatId}`;
+
+    const socketsId = await redisClient.sMembers(room);
 
     console.log("socketsId ", socketsId);
+
+    for (const socketId of socketsId ?? []) {
+        console.log(
+            `[chat-messages] enviarei mensagem para o socket de id ${socketId}`
+        );
+
+        io.to(socketId).emit("newMessage", chatMessage);
+    }
 });
 
 server.listen(port, () => {
