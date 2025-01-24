@@ -72,7 +72,6 @@ wss.on("connection", (ws) => {
                     `[leaveChat] Socket ${ws.clientId} saindo da sala ${roomLeave}`
                 );
 
-                ws.leave(roomLeave);
                 redisClient.sRem(roomLeave, ws.clientId);
                 break;
 
