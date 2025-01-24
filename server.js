@@ -35,7 +35,6 @@ io.on("connection", (socket) => {
         const room = `chat-${chatId}`;
 
         console.log(`[enterChat] Socket ${socket.id} entrando na sala ${room}`);
-        socket.join(room);
         redisClient.sAdd(room, socket.id);
     });
 
